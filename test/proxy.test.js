@@ -56,6 +56,16 @@ test('a broken jq filter is a server error', async () => {
   await assert.rejects(transform({}), { status: 500 });
 });
 
+test('example view keeps CONSTRUCT templates in the front-end vocabulary', async () => {
+  const config = await loadConfig(fileURLToPath(new URL('../examples/foaf-as-schema/config.json', import.meta.url)));
+  const out = await createConfiguredRewriter(config)(
+    'CONSTRUCT { ?p <http://schema.org/name> ?n } WHERE { ?p <http://schema.org/name> ?n }');
+  const [template, where] = out.split(/\bWHERE\b/);
+  assert.match(template, /<http:\/\/schema.org\/name>/);
+  assert.match(where, /<http:\/\/xmlns.com\/foaf\/0.1\/name>/);
+  assert.doesNotMatch(where, /schema.org/);
+});
+
 let upstream;
 let proxy;
 let received;
