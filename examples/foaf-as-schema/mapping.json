@@ -1,0 +1,6 @@
+{
+  "http://schema.org/Person": "http://xmlns.com/foaf/0.1/Person",
+  "http://schema.org/name": "http://xmlns.com/foaf/0.1/name",
+  "http://schema.org/knows": "http://xmlns.com/foaf/0.1/knows",
+  "http://schema.org/image": "http://xmlns.com/foaf/0.1/depiction"
+}

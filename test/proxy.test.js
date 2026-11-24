@@ -1,6 +1,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createProxy, createRewriter, createConfiguredRewriter, jqTransform, loadConfig, startProxy, JqError,
@@ -51,9 +54,8 @@ test('jq error() rejects a query with status 400', async () => {
   });
 });
 
-test('a broken jq filter is a server error', async () => {
-  const transform = jqTransform({ filter: `${fixtures}view.jq`, libraryPaths: [] }); // module not found
-  await assert.rejects(transform({}), { status: 500 });
+test('a broken jq filter is reported when the transform is built', () => {
+  assert.throws(() => jqTransform({ filter: `${fixtures}view.jq`, libraryPaths: [] }), /module not found: acme\/terms/);
 });
 
 test('example view keeps CONSTRUCT templates in the front-end vocabulary', async () => {
@@ -64,6 +66,35 @@ test('example view keeps CONSTRUCT templates in the front-end vocabulary', async
   assert.match(template, /<http:\/\/schema.org\/name>/);
   assert.match(where, /<http:\/\/xmlns.com\/foaf\/0.1\/name>/);
   assert.doesNotMatch(where, /schema.org/);
+});
+
+test('argFiles give jq the JSON values of files, as --slurpfile does', async () => {
+  const transform = jqTransform({ filter: `${fixtures}argfiles/echo.jq`, argFiles: { data: 'data.json' } });
+  assert.deepEqual(await transform({ x: 1 }), { x: 1, data: [{ answer: 42, list: [1, 'two', null] }] });
+});
+
+test('argFiles are not limited by the command-line argument size', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'svp-'));
+  try {
+    writeFileSync(join(dir, 'big.json'), JSON.stringify({ big: 'x'.repeat(1024 * 1024) }));
+    const transform = jqTransform({ filter: `${fixtures}argfiles/echo.jq`, argFiles: { data: join(dir, 'big.json') } });
+    assert.equal((await transform({})).data[0].big.length, 1024 * 1024);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('argFiles errors are reported when the transform is built', () => {
+  const filter = `${fixtures}argfiles/echo.jq`;
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'missing.json' } }), /--slurpfile data .*missing\.json: Could not open/);
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'broken.json' } }), /--slurpfile data .*broken\.json/);
+  assert.throws(() => jqTransform({ filter, args: { data: 1 }, argFiles: { data: 'data.json' } }), /both args and argFiles/);
+  assert.throws(() => jqTransform({ filter, args: { data: 'x'.repeat(200000) } }), /too large[^]*argFiles/);
+});
+
+test('loadConfig resolves argFiles against the configuration folder', async () => {
+  const config = await loadConfig(fileURLToPath(new URL('../examples/foaf-as-schema/config.json', import.meta.url)));
+  assert.equal(config.argFiles.mapping, fileURLToPath(new URL('../examples/foaf-as-schema/mapping.json', import.meta.url)));
 });
 
 let upstream;

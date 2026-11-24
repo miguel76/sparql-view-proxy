@@ -10,19 +10,25 @@ export { createHandler, startServer } from './server.js';
 
 /**
  * Reads a JSON configuration file. Relative paths in it (`filter`,
- * `libraryPaths`) are taken relative to the file's folder.
+ * `libraryPaths`, `argFiles`) are taken relative to the file's folder.
  */
 export async function loadConfig(file) {
   const config = JSON.parse(await readFile(file, 'utf8'));
   const base = dirname(resolve(file));
   if (config.filter) config.filter = resolve(base, config.filter);
   config.libraryPaths = (config.libraryPaths ?? ['jq_modules']).map((p) => resolve(base, p));
+  if (config.argFiles) {
+    config.argFiles = Object.fromEntries(Object.entries(config.argFiles).map(([name, p]) => [name, resolve(base, p)]));
+  }
   return config;
 }
 
 /** Builds the query rewriter `(query, dataset?) => Promise<string>` described by a configuration. */
-export function createConfiguredRewriter({ filter, libraryPaths, args, jq, quads, baseIRI }) {
-  return createRewriter(jqTransform({ filter, libraryPaths, args, jq }), { quads, baseIRI });
+export function createConfiguredRewriter({
+  filter, libraryPaths, args, argFiles, jq, jqProcesses, jqTimeout, quads, baseIRI,
+}) {
+  const transform = jqTransform({ filter, libraryPaths, args, argFiles, jq, processes: jqProcesses, timeout: jqTimeout });
+  return createRewriter(transform, { quads, baseIRI });
 }
 
 // `log` may be a function or `true` for timestamped messages on stderr.
