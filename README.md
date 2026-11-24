@@ -158,3 +158,7 @@ Exports: `createProxy`, `startProxy`, `loadConfig`, `createConfiguredRewriter`,
 - jq runs as a separate process per query (a few milliseconds), because that
   is what gives filters jq's full module system; the in-process jq bindings
   for Node.js cannot load modules from disk.
+
+## License
+
+[MIT](LICENSE)
