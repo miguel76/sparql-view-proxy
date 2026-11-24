@@ -24,8 +24,11 @@ export async function loadConfig(file) {
 }
 
 /** Builds the query rewriter `(query, dataset?) => Promise<string>` described by a configuration. */
-export function createConfiguredRewriter({ filter, libraryPaths, args, argFiles, jq, quads, baseIRI }) {
-  return createRewriter(jqTransform({ filter, libraryPaths, args, argFiles, jq }), { quads, baseIRI });
+export function createConfiguredRewriter({
+  filter, libraryPaths, args, argFiles, jq, jqProcesses, jqTimeout, quads, baseIRI,
+}) {
+  const transform = jqTransform({ filter, libraryPaths, args, argFiles, jq, processes: jqProcesses, timeout: jqTimeout });
+  return createRewriter(transform, { quads, baseIRI });
 }
 
 // `log` may be a function or `true` for timestamped messages on stderr.

@@ -54,9 +54,8 @@ test('jq error() rejects a query with status 400', async () => {
   });
 });
 
-test('a broken jq filter is a server error', async () => {
-  const transform = jqTransform({ filter: `${fixtures}view.jq`, libraryPaths: [] }); // module not found
-  await assert.rejects(transform({}), { status: 500 });
+test('a broken jq filter is reported when the transform is built', () => {
+  assert.throws(() => jqTransform({ filter: `${fixtures}view.jq`, libraryPaths: [] }), /module not found: acme\/terms/);
 });
 
 test('example view keeps CONSTRUCT templates in the front-end vocabulary', async () => {
@@ -87,8 +86,8 @@ test('argFiles are not limited by the command-line argument size', async () => {
 
 test('argFiles errors are reported when the transform is built', () => {
   const filter = `${fixtures}argfiles/echo.jq`;
-  assert.throws(() => jqTransform({ filter, argFiles: { data: 'missing.json' } }), /cannot load argFiles:.*data.*Could not open/);
-  assert.throws(() => jqTransform({ filter, argFiles: { data: 'broken.json' } }), /cannot load argFiles:.*data.*broken\.json/);
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'missing.json' } }), /--slurpfile data .*missing\.json: Could not open/);
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'broken.json' } }), /--slurpfile data .*broken\.json/);
   assert.throws(() => jqTransform({ filter, args: { data: 1 }, argFiles: { data: 'data.json' } }), /both args and argFiles/);
   assert.throws(() => jqTransform({ filter, args: { data: 'x'.repeat(200000) } }), /too large[^]*argFiles/);
 });

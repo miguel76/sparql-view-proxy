@@ -64,12 +64,13 @@ function serviceDescription(endpoint) {
  * @param {number} [options.timeout] upstream timeout in milliseconds (none when 0)
  * @param {boolean} [options.cors] answer cross-origin requests
  * @param {(message: string) => void} [options.log] logger for queries and errors
+ * @returns the handler, with a `close()` method that closes the rewriter (e.g. its jq processes)
  */
 export function createHandler({ endpoint, rewrite, path, method = 'POST', headers = {}, timeout = 0, cors = true, log = () => {} }) {
   if (!endpoint) throw new TypeError('createHandler: an upstream endpoint is required');
   if (!rewrite) throw new TypeError('createHandler: a rewrite function is required');
 
-  return async (req, res) => {
+  const handler = async (req, res) => {
     if (cors) res.setHeader('Access-Control-Allow-Origin', '*');
     const fail = (status, message) => {
       if (res.headersSent) return res.destroy();
@@ -142,11 +143,17 @@ export function createHandler({ endpoint, rewrite, path, method = 'POST', header
       fail(status, e.message);
     }
   };
+  handler.close = () => rewrite.close?.();
+  return handler;
 }
 
-/** Starts an HTTP server with `createHandler(options)` on `options.port` / `options.host`. */
+/**
+ * Starts an HTTP server with `createHandler(options)` on `options.port` /
+ * `options.host`. Closing the server also closes the rewriter.
+ */
 export function startServer({ port = 8080, host, ...options }) {
-  const server = createServer(createHandler(options));
+  const handler = createHandler(options);
+  const server = createServer(handler).on('close', handler.close);
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => resolve(server));

@@ -48,12 +48,13 @@ export function withDataset(algebra, { defaultGraphs = [], namedGraphs = [] } = 
 }
 
 /**
- * Builds a query rewriter: `(query, dataset?) => Promise<string>`.
+ * Builds a query rewriter: `(query, dataset?) => Promise<string>`. Its
+ * `close()` method calls the transform's `close()`, if it has one.
  * @param {(algebra: object) => object | Promise<object>} transform front-end algebra to back-end algebra
  * @param {{ quads?: boolean, baseIRI?: string }} [options] how the algebra is built
  */
 export function createRewriter(transform, options = {}) {
-  return async (query, dataset) => {
+  const rewrite = async (query, dataset) => {
     const algebra = withDataset(parseToAlgebra(query, options), dataset);
     const rewritten = await transform(algebra);
     try {
@@ -62,4 +63,6 @@ export function createRewriter(transform, options = {}) {
       throw new QueryError(`Cannot serialize the rewritten algebra: ${e.message}`, 500);
     }
   };
+  rewrite.close = () => transform.close?.();
+  return rewrite;
 }
