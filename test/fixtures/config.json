@@ -1,0 +1,6 @@
+{
+  "endpoint": "http://127.0.0.1:1/sparql",
+  "filter": "view.jq",
+  "args": { "from": "http://front/p", "to": "http://back/p" },
+  "log": false
+}

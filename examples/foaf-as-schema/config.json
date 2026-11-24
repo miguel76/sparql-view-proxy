@@ -1,0 +1,7 @@
+{
+  "endpoint": "https://example.org/sparql",
+  "filter": "view.jq",
+  "args": { "graph": "http://example.org/people" },
+  "port": 8080,
+  "log": true
+}
