@@ -74,7 +74,7 @@ Relative paths are relative to the configuration file's folder.
 | `filter`       | (required)         | Path of the jq filter file. |
 | `libraryPaths` | `["jq_modules"]`   | jq module search paths (jq's `-L`). The default is where jqpm installs packages. |
 | `args`         | `{}`               | Named arguments for the filter: each `"name": value` is available as `$name` (and in `$ARGS.named`). |
-| `argFiles`     | `{}`               | Named arguments read from JSON files: each `"name": "file.json"` makes the file's contents available as `$name`, like `args`. See [Arguments from files](#arguments-from-files). |
+| `argFiles`     | `{}`               | Named arguments read from JSON files, as with jq's `--slurpfile`: each `"name": "file.json"` makes the file's JSON values available as the array `$name` (`$name[0]` for a file with one value). See [Arguments from files](#arguments-from-files). |
 | `jq`           | `"jq"`             | The jq executable. |
 | `quads`        | `false`            | Build the algebra with quads (graph names pushed into the patterns) instead of `graph` operators. |
 | `baseIRI`      | none               | Base IRI to resolve relative IRIs in queries. |
@@ -112,15 +112,17 @@ JSON file:
 }
 ```
 
-In the filter, `$mapping` is the file's contents (not wrapped in an array, as
-jq's `--slurpfile` would do). The files are read and checked when the proxy
-starts, so edits take effect on restart, and a missing or invalid file stops
-the proxy from starting. A name can't be in both `args` and `argFiles`.
+The files are given to jq with `--slurpfile`, so jq reads them itself and
+their size is not limited. As with `--slurpfile`, `$mapping` is an array of
+the JSON values in the file: for a file holding one JSON document, use
+`$mapping[0]`.
 
-Arguments are passed to jq on its command line, which on Linux limits each one
-to 128 KiB. For larger data, use jq's own data import in the filter instead:
-`import "./mapping" as $m;` reads `mapping.json` next to the filter, with no
-size limit, and gives its contents as `$m[0]`.
+jq reads the files on every query, so edits take effect at once. The proxy
+also checks them when it starts: a missing or invalid file stops it from
+starting. A name can't be in both `args` and `argFiles`.
+
+Values in `args` go on jq's command line instead, which on Linux limits each
+one to 128 KiB; move larger values to a file in `argFiles`.
 
 To see what the filter receives, print the algebra of a query:
 

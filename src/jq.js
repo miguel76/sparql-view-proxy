@@ -1,5 +1,4 @@
-import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import { delimiter, dirname, resolve } from 'node:path';
 
 /** Error raised when jq fails. `status` is the HTTP status the proxy reports. */
@@ -16,26 +15,6 @@ export class JqError extends Error {
 // Linux caps each command-line argument at 128 KiB (MAX_ARG_STRLEN, terminating NUL included).
 const MAX_ARG_BYTES = 128 * 1024;
 
-function readArgFiles(argFiles, cwd, args) {
-  const values = {};
-  for (const [name, file] of Object.entries(argFiles)) {
-    if (Object.hasOwn(args, name)) throw new TypeError(`jq argument $${name} is set in both args and argFiles`);
-    const path = resolve(cwd, file);
-    let text;
-    try {
-      text = readFileSync(path, 'utf8');
-    } catch (e) {
-      throw new TypeError(`cannot read the file of jq argument $${name}: ${e.message}`);
-    }
-    try {
-      values[name] = JSON.parse(text);
-    } catch (e) {
-      throw new TypeError(`the file of jq argument $${name} (${path}) is not valid JSON: ${e.message}`);
-    }
-  }
-  return values;
-}
-
 /**
  * Builds a transform `(json) => Promise<json>` that pipes its input through a
  * jq filter file. It runs the jq executable, so the filter can `import` and
@@ -48,8 +27,10 @@ function readArgFiles(argFiles, cwd, args) {
  * @param {string} options.filter path of the jq filter file
  * @param {string[]} [options.libraryPaths] module search paths, relative to the filter's folder
  * @param {Record<string, unknown>} [options.args] named arguments, available in the filter as `$name`
- * @param {Record<string, string>} [options.argFiles] named arguments read from JSON files (relative to
- *   the filter's folder), available in the filter as `$name`; the files are read once, now
+ *   (passed on jq's command line, so each is limited to 128 KiB on Linux)
+ * @param {Record<string, string>} [options.argFiles] named arguments read by jq from JSON files (paths
+ *   relative to the filter's folder), as with jq's `--slurpfile`: `$name` is the array of the file's
+ *   JSON values, so `$name[0]` for a file holding one value. The files are checked now.
  * @param {string} [options.jq] jq executable
  */
 export function jqTransform({ filter, libraryPaths = ['jq_modules'], args = {}, argFiles = {}, jq = 'jq' }) {
@@ -59,13 +40,25 @@ export function jqTransform({ filter, libraryPaths = ['jq_modules'], args = {}, 
   const envPaths = (process.env.JQ_LIBRARY_PATH ?? '').split(delimiter).filter(Boolean);
   const argv = ['--compact-output'];
   for (const p of [...libraryPaths, ...envPaths]) argv.push('-L', resolve(cwd, p));
-  for (const [name, value] of Object.entries({ ...args, ...readArgFiles(argFiles, cwd, args) })) {
+  for (const [name, value] of Object.entries(args)) {
     const json = JSON.stringify(value);
     if (Buffer.byteLength(json) >= MAX_ARG_BYTES) {
       throw new TypeError(`jq argument $${name} is too large to pass on the command line (${Buffer.byteLength(json)} bytes, `
-        + `the limit is ${MAX_ARG_BYTES - 1}); load it in the filter instead, e.g. import "./${name}" as $${name}; and use $${name}[0]`);
+        + `the limit is ${MAX_ARG_BYTES - 1}); put it in a JSON file and load it with argFiles instead`);
     }
     argv.push('--argjson', name, json);
+  }
+  const slurp = [];
+  for (const [name, file] of Object.entries(argFiles)) {
+    if (Object.hasOwn(args, name)) throw new TypeError(`jq argument $${name} is set in both args and argFiles`);
+    slurp.push('--slurpfile', name, resolve(cwd, file));
+  }
+  if (slurp.length) {
+    // Check the files now, so that a missing or invalid one fails at startup rather than on each query.
+    const check = spawnSync(jq, ['--null-input', ...slurp, 'empty'], { encoding: 'utf8' });
+    if (check.error) throw new TypeError(`cannot run ${jq}: ${check.error.message}`);
+    if (check.status !== 0) throw new TypeError(`cannot load argFiles: ${check.stderr.trim()}`);
+    argv.push(...slurp);
   }
   argv.push('--from-file', filterPath);
 
