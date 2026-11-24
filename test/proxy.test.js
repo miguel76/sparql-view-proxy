@@ -66,6 +66,24 @@ test('example view keeps CONSTRUCT templates in the front-end vocabulary', async
   assert.doesNotMatch(where, /schema.org/);
 });
 
+test('argFiles pass the contents of JSON files as jq arguments', async () => {
+  const transform = jqTransform({ filter: `${fixtures}argfiles/echo.jq`, argFiles: { data: 'data.json' } });
+  assert.deepEqual(await transform({ x: 1 }), { x: 1, data: { answer: 42, list: [1, 'two', null] } });
+});
+
+test('argFiles errors are reported when the transform is built', () => {
+  const filter = `${fixtures}argfiles/echo.jq`;
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'missing.json' } }), /cannot read the file of jq argument \$data/);
+  assert.throws(() => jqTransform({ filter, argFiles: { data: 'broken.json' } }), /not valid JSON/);
+  assert.throws(() => jqTransform({ filter, args: { data: 1 }, argFiles: { data: 'data.json' } }), /both args and argFiles/);
+  assert.throws(() => jqTransform({ filter, args: { data: 'x'.repeat(200000) } }), /too large[^]*import ".\/data" as \$data;/);
+});
+
+test('loadConfig resolves argFiles against the configuration folder', async () => {
+  const config = await loadConfig(fileURLToPath(new URL('../examples/foaf-as-schema/config.json', import.meta.url)));
+  assert.equal(config.argFiles.mapping, fileURLToPath(new URL('../examples/foaf-as-schema/mapping.json', import.meta.url)));
+});
+
 let upstream;
 let proxy;
 let received;

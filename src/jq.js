@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { delimiter, dirname, resolve } from 'node:path';
 
 /** Error raised when jq fails. `status` is the HTTP status the proxy reports. */
@@ -10,6 +11,29 @@ export class JqError extends Error {
     this.stderr = stderr;
     this.status = status;
   }
+}
+
+// Linux caps each command-line argument at 128 KiB (MAX_ARG_STRLEN, terminating NUL included).
+const MAX_ARG_BYTES = 128 * 1024;
+
+function readArgFiles(argFiles, cwd, args) {
+  const values = {};
+  for (const [name, file] of Object.entries(argFiles)) {
+    if (Object.hasOwn(args, name)) throw new TypeError(`jq argument $${name} is set in both args and argFiles`);
+    const path = resolve(cwd, file);
+    let text;
+    try {
+      text = readFileSync(path, 'utf8');
+    } catch (e) {
+      throw new TypeError(`cannot read the file of jq argument $${name}: ${e.message}`);
+    }
+    try {
+      values[name] = JSON.parse(text);
+    } catch (e) {
+      throw new TypeError(`the file of jq argument $${name} (${path}) is not valid JSON: ${e.message}`);
+    }
+  }
+  return values;
 }
 
 /**
@@ -24,16 +48,25 @@ export class JqError extends Error {
  * @param {string} options.filter path of the jq filter file
  * @param {string[]} [options.libraryPaths] module search paths, relative to the filter's folder
  * @param {Record<string, unknown>} [options.args] named arguments, available in the filter as `$name`
+ * @param {Record<string, string>} [options.argFiles] named arguments read from JSON files (relative to
+ *   the filter's folder), available in the filter as `$name`; the files are read once, now
  * @param {string} [options.jq] jq executable
  */
-export function jqTransform({ filter, libraryPaths = ['jq_modules'], args = {}, jq = 'jq' }) {
+export function jqTransform({ filter, libraryPaths = ['jq_modules'], args = {}, argFiles = {}, jq = 'jq' }) {
   if (!filter) throw new TypeError('jqTransform: a filter file is required');
   const filterPath = resolve(filter);
   const cwd = dirname(filterPath);
   const envPaths = (process.env.JQ_LIBRARY_PATH ?? '').split(delimiter).filter(Boolean);
   const argv = ['--compact-output'];
   for (const p of [...libraryPaths, ...envPaths]) argv.push('-L', resolve(cwd, p));
-  for (const [name, value] of Object.entries(args)) argv.push('--argjson', name, JSON.stringify(value));
+  for (const [name, value] of Object.entries({ ...args, ...readArgFiles(argFiles, cwd, args) })) {
+    const json = JSON.stringify(value);
+    if (Buffer.byteLength(json) >= MAX_ARG_BYTES) {
+      throw new TypeError(`jq argument $${name} is too large to pass on the command line (${Buffer.byteLength(json)} bytes, `
+        + `the limit is ${MAX_ARG_BYTES - 1}); load it in the filter instead, e.g. import "./${name}" as $${name}; and use $${name}[0]`);
+    }
+    argv.push('--argjson', name, json);
+  }
   argv.push('--from-file', filterPath);
 
   return (input) => new Promise((resolvePromise, reject) => {

@@ -61,7 +61,8 @@ npx sparql-view-proxy config.json
 The endpoint is then at `http://localhost:8080/sparql`.
 
 See [`examples/foaf-as-schema`](examples/foaf-as-schema) for a fuller example
-that also imports a local module and restricts the view to one graph.
+that also imports a local module, loads its vocabulary mapping from a JSON
+file and restricts the view to one graph.
 
 ## Configuration
 
@@ -73,6 +74,7 @@ Relative paths are relative to the configuration file's folder.
 | `filter`       | (required)         | Path of the jq filter file. |
 | `libraryPaths` | `["jq_modules"]`   | jq module search paths (jq's `-L`). The default is where jqpm installs packages. |
 | `args`         | `{}`               | Named arguments for the filter: each `"name": value` is available as `$name` (and in `$ARGS.named`). |
+| `argFiles`     | `{}`               | Named arguments read from JSON files: each `"name": "file.json"` makes the file's contents available as `$name`, like `args`. See [Arguments from files](#arguments-from-files). |
 | `jq`           | `"jq"`             | The jq executable. |
 | `quads`        | `false`            | Build the algebra with quads (graph names pushed into the patterns) instead of `graph` operators. |
 | `baseIRI`      | none               | Base IRI to resolve relative IRIs in queries. |
@@ -97,6 +99,28 @@ Relative paths are relative to the configuration file's folder.
 - **Dataset:** a dataset given through the protocol (`default-graph-uri`,
   `named-graph-uri`) overrides `FROM`/`FROM NAMED` as the protocol requires,
   and the filter sees it as the top-level `from` operation.
+
+### Arguments from files
+
+Data that a filter uses, such as a vocabulary mapping, can live in its own
+JSON file:
+
+```json
+{
+  "filter": "view.jq",
+  "argFiles": { "mapping": "mapping.json" }
+}
+```
+
+In the filter, `$mapping` is the file's contents (not wrapped in an array, as
+jq's `--slurpfile` would do). The files are read and checked when the proxy
+starts, so edits take effect on restart, and a missing or invalid file stops
+the proxy from starting. A name can't be in both `args` and `argFiles`.
+
+Arguments are passed to jq on its command line, which on Linux limits each one
+to 128 KiB. For larger data, use jq's own data import in the filter instead:
+`import "./mapping" as $m;` reads `mapping.json` next to the filter, with no
+size limit, and gives its contents as `$m[0]`.
 
 To see what the filter receives, print the algebra of a query:
 
