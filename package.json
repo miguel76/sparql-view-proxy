@@ -1,0 +1,35 @@
+{
+  "name": "sparql-view-proxy",
+  "version": "0.1.0",
+  "description": "SPARQL endpoint proxy to build RDF views based on query rewriting using jq",
+  "license": "MIT",
+  "type": "module",
+  "exports": "./src/index.js",
+  "bin": {
+    "sparql-view-proxy": "bin/sparql-view-proxy.js"
+  },
+  "files": [
+    "src",
+    "bin"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "start": "node bin/sparql-view-proxy.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "sparql",
+    "proxy",
+    "rdf",
+    "view",
+    "jq",
+    "query-rewriting"
+  ],
+  "dependencies": {
+    "@traqula/algebra-sparql-1-2": "^1.4.0",
+    "@traqula/generator-sparql-1-2": "^1.4.0",
+    "@traqula/parser-sparql-1-2": "^1.4.0"
+  }
+}
